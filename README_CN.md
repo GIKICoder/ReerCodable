@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/reers/ReerCodable)
+
 # ReerCodable
 使用 Swift macros 对 `Codable` 进行扩展, 以声明式注解让序列化变得更简单!
 ```swift
@@ -25,7 +27,7 @@ struct User {
 # 概述
 ReerCodable 框架提供了一系列自定义宏，用于生成动态的 Codable 实现。该框架的核心是 @Codable() 宏，它可以在其他宏提供的数据标记下生成具体的实现(⚠️ 在 XCode 中进行宏展开时也只能展开 `@Cdable` 宏, 展开其他宏是没有响应的)
 
-主要包含以下 feature:
+框架使用了 [Swift Testing](https://developer.apple.com/xcode/swift-testing/) 进行了全覆盖测试, 主要包含以下 feature:
 - 通过 `@CodingKey("key")` 为每个属性声明自定义的 `CodingKey` 值, 无需编写所有的 `CodingKey` 值.
 - 支持通过字符串表达嵌套的 `CodingKey`, 如 `@CodingKey("nested.key")`
 - 允许使用多个 `CodingKey` 来进行 Decode, 如 `@CodingKey("key1", "key2")`
@@ -49,6 +51,7 @@ ReerCodable 框架提供了一系列自定义宏，用于生成动态的 Codable
 - 支持通过 `@Copyable` 生成 `copy()` 方法, 并且支持部分属性值的 update
 - 自动生成默认实例：使用 `@DefaultInstance` 自动创建类型的默认实例, 可通过 Model.default 访问
 - 灵活的复制与更新：`@Copyable` 宏会生成一个 copy() 方法, 支持在一次调用中实现完整复制或选择性地更新属性值
+- 支持单独使用 `@Decodable` 或 `@Encodable`
 
 
 # 环境要求
@@ -70,7 +73,7 @@ let package = Package(
     name: "YOUR_PROJECT_NAME",
     targets: [],
     dependencies: [
-        .package(url: "https://github.com/reers/ReerCodable.git", from: "1.1.7")
+        .package(url: "https://github.com/reers/ReerCodable.git", from: "1.2.2")
     ]
 )
 </code></pre>
@@ -86,7 +89,7 @@ let package = Package(
 <pre><code class="ruby language-ruby">
 Pod::Spec.new do |s|
   s.name             = 'YourPod'
-  s.dependency 'ReerCodable', '1.1.7'
+  s.dependency 'ReerCodable', '1.2.2'
   # 复制以下 config 到你的 pod
   s.pod_target_xcconfig = {
     'OTHER_SWIFT_FLAGS' => '-Xfrontend -load-plugin-executable -Xfrontend ${PODS_ROOT}/ReerCodable/Sources/Resources/ReerCodableMacros#ReerCodableMacros'
@@ -210,7 +213,7 @@ struct Person {
 
 ### 5. 自定义编解码容器
 
-使用 `@CodingContainer` 自定义编解码时的容器路径, 通常用于根层级的 model 解析：
+使用 `@CodingContainer` 自定义编解码时的容器路径, 通常用于JSON嵌套较多, 但 model 声明 想直接 match 子层级结构：
 
 <table>
 <tr>
@@ -270,11 +273,12 @@ struct User {
 struct User {
     var age: Int = 33
     var name: String = "phoenix"
-    // 若 JSON 中不包含 gender, 原生 Codable 会抛出异常, ReerCodable 不会, 会设置其为 nil
+    // 若 JSON 中 gender 字段不是 `male` 或 `female`, 原生 Codable 会抛出异常, ReerCodable 不会, 会设置其为 nil,  如 {"gender": "other"}, 可能出现在客户端定义了枚举, 但服务端新增了字段的业务场景
     var gender: Gender?
 }
 
-enum Gender {
+@Codable
+enum Gender: String {
     case male, female
 }
 ```
@@ -421,7 +425,7 @@ struct HundredMeterRace {
     var rank: UInt
 }
 ```
-自定义实现过程中, 框架提供的方法也可以是编解码更加方便:
+自定义实现过程中, 框架提供的方法也可以使编解码更加方便:
 ```swift
 public extension Decoder {
     func value<Value: Decodable>(forKeys keys: String...) throws -> Value {
@@ -508,7 +512,7 @@ enum Phone: Codable {
     case oppo
 }
 ```
-- 对于有关联值的枚举, 支持通用 `CaseValue` 来匹配关联值, 使用 `.label()` 来声明有标签的关联值的匹配逻辑, 使用 `.index()` 来声明没有标签的的关联值的匹配逻辑. `ReerCodable` 支持两种JSON 格式的枚举匹配
+- 对于有关联值的枚举, 支持通用 `AssociatedValue` 来匹配关联值, 使用 `.label()` 来声明有标签的关联值的匹配逻辑, 使用 `.index()` 来声明没有标签的的关联值的匹配逻辑. `ReerCodable` 支持两种JSON 格式的枚举匹配
     - 第一种是也是原生 `Codable` 支持的, 即枚举值和其关联值是父子级的结构:
     ```swift
     @Codable
@@ -547,7 +551,7 @@ enum Phone: Codable {
         case tiktok(url: URL, tag: String?)
     }
     ```
-    - 第二种是枚举值和其关联值同级或自定义匹配的结构, 使用 `.pathValue()` 进行自定义路径值的匹配
+    - 第二种是枚举值和其关联值同级或自定义匹配的结构, 使用带有 key path 的 CaseMatcher 进行自定义路径值的匹配
     ```swift
     @Codable
     enum Video1: Codable {
@@ -556,7 +560,7 @@ enum Phone: Codable {
         ///         "middle": "youtube"
         ///     }
         /// }
-        @CodingCase(match: .pathValue("type.middle.youtube"))
+        @CodingCase(match: .string("youtube", at: "type.middle"))
         case youTube
         
         /// {
@@ -565,7 +569,7 @@ enum Phone: Codable {
         ///     "minutes": 999999
         /// }
         @CodingCase(
-            match: .pathValue("type.vimeo"),
+            match: .string("vimeo", at: "type"),
             values: [.label("id", keys: "ID", "Id"), .index(2, keys: "minutes")]
         )
         case vimeo(id: String, duration: TimeInterval = 33, Int)
@@ -576,7 +580,7 @@ enum Phone: Codable {
         ///     "tag": "Art"
         /// }
         @CodingCase(
-            match: .pathValue("type.tiktok"),
+            match: .string("tiktok", at: "type"),
             values: [.label("url", keys: "media")]
         )
         case tiktok(url: URL, tag: String?)
@@ -758,6 +762,20 @@ func copy(
         desc: desc ?? self.desc,
         data: data ?? self.data
     )
+}
+```
+
+### 20. 单独使用 `@Decodable` 或 `@Encodable`
+
+```
+@Decodable
+struct Item: Equatable {
+    let id: Int
+}
+
+@Encodable
+struct User3: Equatable {
+    let name: String
 }
 ```
 

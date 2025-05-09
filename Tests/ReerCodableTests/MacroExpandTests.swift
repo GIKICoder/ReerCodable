@@ -89,6 +89,38 @@ final class ReerCodableTests: XCTestCase {
         #endif
     }
     
+    func testEnumPathValueMacro() throws {
+        #if canImport(ReerCodableMacros)
+        assertMacroExpansion(
+            """
+            @Codable
+            enum Video1: Codable {
+                @CodingCase(match: .string("youtube", at: "type.middle"))
+                case youTube
+                
+                @CodingCase(
+                    match: .string("vimeo", at: "type"),
+                    values: [.label("id", keys: "ID", "Id"), .index(2, keys: "minutes")]
+                )
+                case vimeo(id: String, duration: TimeInterval = 33, Int)
+                
+                @CodingCase(
+                    match: .intRange(20...25, at: "type"),
+                    values: [.label("url", keys: "media")]
+                )
+                case tiktok(url: URL, tag: String?)
+            }
+            """,
+            expandedSource: """
+            
+            """,
+            macros: testMacros
+        )
+        #else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+        #endif
+    }
+    
     static let test = "abc"
     func testMacro() throws {
         #if canImport(ReerCodableMacros)
@@ -96,6 +128,7 @@ final class ReerCodableTests: XCTestCase {
             """
             @Codable
             @ScreamingKebabCase
+            @Copyable
             public final class Test {
                 @CodingKey("age__", "a.b")
                 @EncodingKey("a.b", treatDotAsNested: false)
@@ -148,6 +181,7 @@ final class ReerCodableTests: XCTestCase {
         assertMacroExpansion(
             """
             @Codable
+            @DefaultInstance
             @CodingContainer("data.info", workForEncoding: true)
             struct Person3 {
                 var name: String

@@ -1,5 +1,7 @@
 [简体中文](README_CN.md)
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/reers/ReerCodable)
+
 # ReerCodable
 Extension of `Codable` using Swift macros to make serialization simpler with declarative annotations!
 
@@ -28,6 +30,8 @@ struct User {
 # Overview
 ReerCodable framework provides a series of custom macros for generating dynamic Codable implementations. The core of the framework is the @Codable() macro, which generates concrete implementations under data annotations provided by other macros (⚠️ Only the `@Codable` macro can be expanded in XCode macro expansion, expanding other macros will have no response)
 
+The framework has been fully tested using [Swift Testing](https://developer.apple.com/xcode/swift-testing/). 
+
 Main features include:
 - Declare custom `CodingKey` values for each property through `@CodingKey("key")`, without writing all `CodingKey` values.
 - Support nested `CodingKey` through string expressions, like `@CodingKey("nested.key")`
@@ -54,6 +58,7 @@ Main features include:
 - Flexible copying with updates: 
   The `@Copyable` macro generates a powerful `copy()` method that allows both 
   full copies and selective property updates in a single call
+- Support the use of `@Decodable` or `@Encodable` alone
 
 # Requirements
 XCode 16.0+
@@ -74,7 +79,7 @@ let package = Package(
     name: "YOUR_PROJECT_NAME",
     targets: [],
     dependencies: [
-        .package(url: "https://github.com/reers/ReerCodable.git", from: "1.1.7")
+        .package(url: "https://github.com/reers/ReerCodable.git", from: "1.2.2")
     ]
 )
 </code></pre>
@@ -90,7 +95,7 @@ let package = Package(
 <pre><code class="ruby language-ruby">
 Pod::Spec.new do |s|
   s.name             = 'YourPod'
-  s.dependency 'ReerCodable', '1.1.7'
+  s.dependency 'ReerCodable', '1.2.2'
   # Copy the following config to your pod
   s.pod_target_xcconfig = {
     'OTHER_SWIFT_FLAGS' => '-Xfrontend -load-plugin-executable -Xfrontend ${PODS_ROOT}/ReerCodable/Sources/Resources/ReerCodableMacros#ReerCodableMacros'
@@ -214,7 +219,7 @@ struct Person {
 
 ### 5. Custom Coding Container
 
-Use `@CodingContainer` to customize container paths during encoding, typically used for root-level model parsing:
+Use `@CodingContainer` to customize the container path for encoding and decoding, typically used when dealing with heavily nested JSON structures while wanting the model declaration to directly match a sub-level structure:
 
 <table>
 <tr>
@@ -274,11 +279,12 @@ Default values can be used when decoding fails. Native `Codable` throws an excep
 struct User {
     var age: Int = 33
     var name: String = "phoenix"
-    // If gender is not included in JSON, native Codable will throw an exception, ReerCodable won't, it will set it to nil
+    // If the `gender` field in the JSON is neither `male` nor `female`, the native Codable will throw an exception, whereas ReerCodable will not and instead set it to nil. For example, with `{"gender": "other"}`, this scenario might occur when the client has defined an enum but the server has added new fields in a business context.
     var gender: Gender?
 }
 
-enum Gender {
+@Codable
+enum Gender: String {
     case male, female
 }
 ```
@@ -511,7 +517,7 @@ enum Phone: Codable {
     case oppo
 }
 ```
-- For enums with associated values, support using `CaseValue` to match associated values, use `.label()` to declare matching logic for labeled associated values, use `.index()` to declare matching logic for unlabeled associated values. `ReerCodable` supports two JSON formats for enum matching
+- For enums with associated values, support using `AssociatedValue` to match associated values, use `.label()` to declare matching logic for labeled associated values, use `.index()` to declare matching logic for unlabeled associated values. `ReerCodable` supports two JSON formats for enum matching
     - The first is also supported by native `Codable`, where the enum value and its associated values have a parent-child structure:
     ```swift
     @Codable
@@ -550,7 +556,7 @@ enum Phone: Codable {
         case tiktok(url: URL, tag: String?)
     }
     ```
-    - The second is where enum values and their associated values are at the same level or have custom matching structures, using `.pathValue()` for custom path value matching
+    - The second is where enum values and their associated values are at the same level or have custom matching structures, using CaseMatcher with key path for custom path value matching
     ```swift
     @Codable
     enum Video1: Codable {
@@ -559,7 +565,7 @@ enum Phone: Codable {
         ///         "middle": "youtube"
         ///     }
         /// }
-        @CodingCase(match: .pathValue("type.middle.youtube"))
+        @CodingCase(match: .string("youtube", at: "type.middle"))
         case youTube
         
         /// {
@@ -568,7 +574,7 @@ enum Phone: Codable {
         ///     "minutes": 999999
         /// }
         @CodingCase(
-            match: .pathValue("type.vimeo"),
+            match: .string("vimeo", at: "type"),
             values: [.label("id", keys: "ID", "Id"), .index(2, keys: "minutes")]
         )
         case vimeo(id: String, duration: TimeInterval = 33, Int)
@@ -579,7 +585,7 @@ enum Phone: Codable {
         ///     "tag": "Art"
         /// }
         @CodingCase(
-            match: .pathValue("type.tiktok"),
+            match: .string("tiktok", at: "type"),
             values: [.label("url", keys: "media")]
         )
         case tiktok(url: URL, tag: String?)
@@ -761,6 +767,20 @@ func copy(
         desc: desc ?? self.desc,
         data: data ?? self.data
     )
+}
+```
+
+### 20. Use `@Decodable` or `@Encodable` alone
+
+```
+@Decodable
+struct Item: Equatable {
+    let id: Int
+}
+
+@Encodable
+struct User3: Equatable {
+    let name: String
 }
 ```
 
